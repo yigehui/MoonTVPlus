@@ -123,6 +123,31 @@ function buildUpstreamHeaders(request: NextRequest, upstreamUrl: string) {
   return headers;
 }
 
+function inferAudioContentType(upstreamUrl: string, upstreamContentType: string | null, requestedQuality: string) {
+  const pathname = new URL(upstreamUrl).pathname.toLowerCase();
+
+  if (pathname.endsWith('.flac') || requestedQuality === 'flac') {
+    return 'audio/flac';
+  }
+  if (pathname.endsWith('.m4a') || pathname.endsWith('.mp4')) {
+    return 'audio/mp4';
+  }
+  if (pathname.endsWith('.aac')) {
+    return 'audio/aac';
+  }
+  if (pathname.endsWith('.ogg') || pathname.endsWith('.opus')) {
+    return 'audio/ogg';
+  }
+  if (pathname.endsWith('.wav')) {
+    return 'audio/wav';
+  }
+  if (pathname.endsWith('.mp3')) {
+    return 'audio/mpeg';
+  }
+
+  return upstreamContentType || 'audio/mpeg';
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -185,7 +210,7 @@ export async function GET(request: NextRequest) {
     }
 
     const responseHeaders = new Headers();
-    responseHeaders.set('Content-Type', upstream.headers.get('content-type') || 'audio/mpeg');
+    responseHeaders.set('Content-Type', inferAudioContentType(upstreamUrl, upstream.headers.get('content-type'), quality));
     responseHeaders.set('Cache-Control', 'public, max-age=31536000, immutable');
     responseHeaders.set('Accept-Ranges', upstream.headers.get('accept-ranges') || 'bytes');
     responseHeaders.set('Access-Control-Allow-Origin', '*');
