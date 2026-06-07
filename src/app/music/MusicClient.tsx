@@ -227,7 +227,7 @@ export default function MusicClient({ children: _children }: { children?: React.
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(100);
-  const [quality, setQuality] = useState<MusicQuality>('320k');
+  const [quality, setQuality] = useState<MusicQuality>('auto');
   const [playMode, setPlayMode] = useState<'loop' | 'single' | 'random'>('loop');
   const [currentSongIndex, setCurrentSongIndex] = useState(-1);
   const [showPlayer, setShowPlayer] = useState(false);
@@ -599,7 +599,7 @@ export default function MusicClient({ children: _children }: { children?: React.
 
         // 恢复配置状态（不包括歌曲）
         setCurrentSource(normalizeSource(playState.currentSource));
-        setQuality(playState.quality || '320k');
+        setQuality(playState.quality || 'auto');
         setPlayMode(playState.playMode || 'loop');
         setVolume(playState.volume || 100);
 
@@ -625,7 +625,7 @@ export default function MusicClient({ children: _children }: { children?: React.
           songStartTimeRef.current = Date.now();
 
           const platform = latestDbSong.platform || 'kw';
-          const selectedQuality = playState.quality || '320k';
+          const selectedQuality = playState.quality || 'auto';
 
           const restoreTime = () => {
             if (audioRef.current && dbPlayTime > 0) {
@@ -1229,7 +1229,7 @@ export default function MusicClient({ children: _children }: { children?: React.
   };
 
   const cycleQuality = () => {
-    const qualities: MusicQuality[] = ['128k', '320k', 'flac', 'flac24bit'];
+    const qualities: MusicQuality[] = ['auto', '128k', '320k', 'flac', 'flac24bit'];
     const currentIndex = qualities.indexOf(quality);
     const nextIndex = (currentIndex + 1) % qualities.length;
     void handleQualityChange(qualities[nextIndex]);
@@ -1597,10 +1597,12 @@ export default function MusicClient({ children: _children }: { children?: React.
 
   const getQualityLabel = () => {
     switch (quality) {
+      case 'auto': return 'AUTO';
       case '128k': return '标准';
       case '320k': return 'HQ';
       case 'flac': return 'SQ';
       case 'flac24bit': return 'HR';
+      default: return 'AUTO';
     }
   };
 
@@ -2955,94 +2957,22 @@ export default function MusicClient({ children: _children }: { children?: React.
             <div className="p-4 space-y-2">
               <button
                 onClick={() => {
-                  void handleQualityChange('128k');
+                  void handleQualityChange('auto');
                 }}
                 className={`w-full p-4 rounded-lg flex items-center justify-between transition-colors ${
-                  quality === '128k'
+                  quality === 'auto'
                     ? 'bg-amber-500/20 border border-amber-500/50'
                     : 'bg-white/5 hover:bg-white/10'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <div className={`w-2 h-2 rounded-full ${quality === '128k' ? 'bg-amber-400' : 'bg-zinc-600'}`} />
+                  <div className={`w-2 h-2 rounded-full ${quality === 'auto' ? 'bg-amber-400' : 'bg-zinc-600'}`} />
                   <div className="text-left">
-                    <div className="text-white font-medium">标准音质</div>
-                    <div className="text-xs text-zinc-500">128kbps</div>
+                    <div className="text-white font-medium">自动选择最佳音质</div>
+                    <div className="text-xs text-zinc-500">优先使用当前音源可播放的最高音质</div>
                   </div>
                 </div>
-                {quality === '128k' && (
-                  <svg className="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                )}
-              </button>
-
-              <button
-                onClick={() => {
-                  void handleQualityChange('320k');
-                }}
-                className={`w-full p-4 rounded-lg flex items-center justify-between transition-colors ${
-                  quality === '320k'
-                    ? 'bg-amber-500/20 border border-amber-500/50'
-                    : 'bg-white/5 hover:bg-white/10'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`w-2 h-2 rounded-full ${quality === '320k' ? 'bg-amber-400' : 'bg-zinc-600'}`} />
-                  <div className="text-left">
-                    <div className="text-white font-medium">高品质 HQ</div>
-                    <div className="text-xs text-zinc-500">320kbps</div>
-                  </div>
-                </div>
-                {quality === '320k' && (
-                  <svg className="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                )}
-              </button>
-
-              <button
-                onClick={() => {
-                  void handleQualityChange('flac');
-                }}
-                className={`w-full p-4 rounded-lg flex items-center justify-between transition-colors ${
-                  quality === 'flac'
-                    ? 'bg-amber-500/20 border border-amber-500/50'
-                    : 'bg-white/5 hover:bg-white/10'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`w-2 h-2 rounded-full ${quality === 'flac' ? 'bg-amber-400' : 'bg-zinc-600'}`} />
-                  <div className="text-left">
-                    <div className="text-white font-medium">无损音质 SQ</div>
-                    <div className="text-xs text-zinc-500">FLAC</div>
-                  </div>
-                </div>
-                {quality === 'flac' && (
-                  <svg className="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                )}
-              </button>
-
-              <button
-                onClick={() => {
-                  void handleQualityChange('flac24bit');
-                }}
-                className={`w-full p-4 rounded-lg flex items-center justify-between transition-colors ${
-                  quality === 'flac24bit'
-                    ? 'bg-amber-500/20 border border-amber-500/50'
-                    : 'bg-white/5 hover:bg-white/10'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`w-2 h-2 rounded-full ${quality === 'flac24bit' ? 'bg-amber-400' : 'bg-zinc-600'}`} />
-                  <div className="text-left">
-                    <div className="text-white font-medium">Hi-Res音质 HR</div>
-                    <div className="text-xs text-zinc-500">FLAC 24bit</div>
-                  </div>
-                </div>
-                {quality === 'flac24bit' && (
+                {quality === 'auto' && (
                   <svg className="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>

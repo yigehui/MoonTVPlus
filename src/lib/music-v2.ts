@@ -3,7 +3,7 @@ import { getConfig } from '@/lib/config';
 export const runtime = 'nodejs';
 
 export type MusicSource = 'wy' | 'tx' | 'kw' | 'kg' | 'mg';
-export type MusicQuality = '128k' | '192k' | '320k' | 'flac' | 'flac24bit';
+export type MusicQuality = '128k' | '192k' | '320k' | 'flac' | 'flac24bit' | 'auto';
 
 export function normalizeMusicSource(source?: string): MusicSource | '' {
   switch ((source || '').trim()) {
@@ -24,7 +24,7 @@ export function normalizeMusicSource(source?: string): MusicSource | '' {
   }
 }
 
-export function normalizeMusicQuality(quality?: string): Exclude<MusicQuality, 'flac24bit'> {
+export function normalizeMusicQuality(quality?: string): Exclude<MusicQuality, 'flac24bit' | 'auto'> {
   switch (quality) {
     case '128k':
     case '192k':
@@ -32,9 +32,10 @@ export function normalizeMusicQuality(quality?: string): Exclude<MusicQuality, '
     case 'flac':
       return quality;
     case 'flac24bit':
+    case 'auto':
       return 'flac';
     default:
-      return '320k';
+      return 'flac';
   }
 }
 
