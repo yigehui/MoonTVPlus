@@ -5,7 +5,7 @@ import { badRequest } from '@/lib/music-v2-api';
 
 export const runtime = 'nodejs';
 
-const STREAM_URL_CACHE_TTL_MS = 10 * 60 * 1000;
+const STREAM_URL_CACHE_TTL_MS = 30 * 1000;
 
 type StreamUrlCacheValue = {
   url: string;
@@ -177,22 +177,20 @@ export async function GET(request: NextRequest) {
     let upstreamUrl = await resolveStreamUrl(song, quality, cacheKey);
     let upstreamHeaders = buildUpstreamHeaders(request, upstreamUrl);
 
+    const fetchUpstream = (url: string, headers: Headers) => fetch(url, {
+      headers,
+      signal: AbortSignal.timeout(90000),
+      cache: 'no-store',
+    });
+
     let upstream: Response;
     try {
-      upstream = await fetch(upstreamUrl, {
-        headers: upstreamHeaders,
-        signal: AbortSignal.timeout(90000),
-        cache: 'no-store',
-      });
+      upstream = await fetchUpstream(upstreamUrl, upstreamHeaders);
     } catch (error) {
       streamUrlCache.delete(cacheKey);
       upstreamUrl = await resolveStreamUrl(song, quality, cacheKey);
       upstreamHeaders = buildUpstreamHeaders(request, upstreamUrl);
-      upstream = await fetch(upstreamUrl, {
-        headers: upstreamHeaders,
-        signal: AbortSignal.timeout(90000),
-        cache: 'no-store',
-      });
+      upstream = await fetchUpstream(upstreamUrl, upstreamHeaders);
       console.warn('[music-v2/stream] upstream fetch failed once, retried with refreshed URL', {
         source,
         songId,
@@ -203,15 +201,23 @@ export async function GET(request: NextRequest) {
     }
 
     if (!upstream.ok && upstream.status !== 206) {
-      if (upstream.status === 401 || upstream.status === 403 || upstream.status === 404) {
+      if ([401, 403, 404, 410, 416].includes(upstream.status)) {
         streamUrlCache.delete(cacheKey);
+        upstreamUrl = await resolveStreamUrl(song, quality, cacheKey);
+        upstreamHeaders = buildUpstreamHeaders(request, upstreamUrl);
+        upstream = await fetchUpstream(upstreamUrl, upstreamHeaders);
       }
-      return NextResponse.json({ success: false, error: { code: 'STREAM_FAILED', message: '获取音频流失败' } }, { status: upstream.status });
+
+      if (!upstream.ok && upstream.status !== 206) {
+        return NextResponse.json({ success: false, error: { code: 'STREAM_FAILED', message: '获取音频流失败' } }, { status: upstream.status });
+      }
     }
 
     const responseHeaders = new Headers();
     responseHeaders.set('Content-Type', inferAudioContentType(upstreamUrl, upstream.headers.get('content-type'), quality));
-    responseHeaders.set('Cache-Control', 'public, max-age=31536000, immutable');
+    responseHeaders.set('Cache-Control', 'no-store');
+    responseHeaders.set('Pragma', 'no-cache');
+    responseHeaders.set('Expires', '0');
     responseHeaders.set('Accept-Ranges', upstream.headers.get('accept-ranges') || 'bytes');
     responseHeaders.set('Access-Control-Allow-Origin', '*');
 
