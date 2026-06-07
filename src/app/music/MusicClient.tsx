@@ -397,10 +397,14 @@ export default function MusicClient({ children: _children }: { children?: React.
   };
 
   const buildStreamUrl = (song: Song, source: MusicSource, songQuality: MusicQuality) => {
+    const effectiveQuality = songQuality === 'auto'
+      ? (song.qualities?.[0]?.type || '320k')
+      : songQuality;
+
     const params = new URLSearchParams({
       songId: song.id,
       source,
-      quality: songQuality,
+      quality: effectiveQuality,
       songmid: song.songmid || song.id.split('_').slice(1).join('_'),
       name: song.name,
       artist: song.artist,
@@ -437,6 +441,7 @@ export default function MusicClient({ children: _children }: { children?: React.
           cover: song.pic,
           durationSec: song.duration,
           durationText: song.durationText,
+          qualities: song.qualities,
         },
         quality: songQuality,
       }),

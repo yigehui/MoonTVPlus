@@ -1,6 +1,11 @@
 export type MusicSource = 'wy' | 'tx' | 'kw' | 'kg' | 'mg';
 
-export type MusicQuality = '128k' | '320k' | 'flac' | 'flac24bit';
+export type MusicQuality = '128k' | '192k' | '320k' | 'flac' | 'flac24bit' | 'auto';
+
+export interface SongQualityOption {
+  type: MusicQuality | 'ape' | 'wav' | 'master';
+  size?: number | null;
+}
 
 export interface Song {
   id: string;
@@ -12,6 +17,7 @@ export interface Song {
   duration?: number;
   durationText?: string;
   songmid?: string;
+  qualities?: SongQualityOption[];
 }
 
 export interface Playlist {

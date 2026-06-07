@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { extractSongmid, fetchLxLyric, MusicQuality, normalizeMusicQuality, normalizeSong, lxPostJson } from '@/lib/music-v2';
+import { extractSongmid, fetchLxLyric, MusicQuality, normalizeSong, lxPostJson } from '@/lib/music-v2';
 import { badRequest, internalError } from '@/lib/music-v2-api';
 
 export const runtime = 'nodejs';
 
 const PLAY_META_CACHE_TTL_MS = 2 * 60 * 60 * 1000;
+const QUALITY_PRIORITY = ['flac24bit', 'flac', '320k', '192k', '128k'] as const;
 
 type PlayMetaPayload = {
   song: ReturnType<typeof normalizeSong>;
@@ -67,11 +68,23 @@ function setCachedPlayMeta(cacheKey: string, payload: PlayMetaPayload) {
   });
 }
 
+function resolveRequestedQualities(song: ReturnType<typeof normalizeSong>, requestedQuality: MusicQuality) {
+  const available = (song.qualities || [])
+    .map(item => item.type)
+    .filter((type): type is typeof QUALITY_PRIORITY[number] => QUALITY_PRIORITY.includes(type as typeof QUALITY_PRIORITY[number]));
+
+  if (requestedQuality !== 'auto') {
+    return [requestedQuality];
+  }
+
+  const dedupedAvailable = QUALITY_PRIORITY.filter(type => available.includes(type));
+  return dedupedAvailable.length ? dedupedAvailable : ['flac24bit', 'flac', '320k', '192k', '128k'];
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const requestedQuality = ((body?.quality || '320k') as MusicQuality);
-    const quality = normalizeMusicQuality(requestedQuality);
+    const requestedQuality = ((body?.quality || 'auto') as MusicQuality);
     const includeUrl = body?.includeUrl !== false;
     const song = normalizeSong(body?.song || {});
 
@@ -79,7 +92,9 @@ export async function POST(request: NextRequest) {
       return badRequest(`歌曲信息不完整: songId=${song.songId || ''}, source=${song.source || ''}, name=${song.name || ''}, artist=${song.artist || ''}`);
     }
 
-    const cacheKey = getPlayMetaCacheKey(song, quality);
+    const candidateQualities = resolveRequestedQualities(song, requestedQuality);
+    const primaryQuality = candidateQualities[0] || '320k';
+    const cacheKey = getPlayMetaCacheKey(song, primaryQuality);
     let cachedMeta = getCachedPlayMeta(cacheKey);
 
     if (!cachedMeta) {
@@ -109,20 +124,31 @@ export async function POST(request: NextRequest) {
     let attempts = cachedMeta.meta.attempts || [];
 
     if (includeUrl) {
-      const urlResult = await lxPostJson<{ url?: string; type?: string; attempts?: any[]; error?: string }>(
-        '/api/music/url',
-        {
-          songInfo: {
-            id: song.songId,
-            name: song.name,
-            singer: song.artist,
-            source: song.source,
-            songmid: song.songmid || song.songId.split('_').slice(1).join('_'),
+      let urlResult: { url?: string; type?: string; attempts?: any[]; error?: string } | null = null;
+      const collectedAttempts: any[] = [];
+
+      for (const quality of candidateQualities) {
+        const result = await lxPostJson<{ url?: string; type?: string; attempts?: any[]; error?: string }>(
+          '/api/music/url',
+          {
+            songInfo: {
+              id: song.songId,
+              name: song.name,
+              singer: song.artist,
+              source: song.source,
+              songmid: song.songmid || song.songId.split('_').slice(1).join('_'),
+            },
+            quality,
           },
-          quality,
-        },
-        'auto'
-      );
+          'auto'
+        );
+
+        if (result?.attempts?.length) collectedAttempts.push(...result.attempts);
+        if (result?.url) {
+          urlResult = result;
+          break;
+        }
+      }
 
       if (!urlResult?.url) {
         return NextResponse.json({
@@ -134,11 +160,11 @@ export async function POST(request: NextRequest) {
         }, { status: 502 });
       }
 
-      attempts = urlResult.attempts || attempts;
+      attempts = collectedAttempts.length ? collectedAttempts : (urlResult.attempts || attempts);
       play = {
-        url: buildStableStreamUrl(song, quality),
+        url: buildStableStreamUrl(song, urlResult.type || primaryQuality),
         directUrl: urlResult.url,
-        quality: urlResult.type || quality,
+        quality: urlResult.type || primaryQuality,
         requestedQuality,
       };
     }

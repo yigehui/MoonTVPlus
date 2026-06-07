@@ -55,6 +55,7 @@ export interface MusicV2Song {
   lrcUrl?: string;
   mrcUrl?: string;
   trcUrl?: string;
+  qualities?: Array<{ type: string; size?: number | null }>;
 }
 
 export interface MusicV2HistoryRecord extends MusicV2Song {
@@ -98,9 +99,13 @@ export interface LxServerSong {
   pic?: string;
   cover?: string;
   songmid?: string;
+  types?: Array<{ type: string; size?: number | null }>;
+  _types?: Record<string, { size?: number | null }>;
   meta?: {
     picUrl?: string;
     albumName?: string;
+    qualitys?: Array<{ type: string; size?: number | null }>;
+    _qualitys?: Record<string, { size?: number | null }>;
   };
   album?: {
     picUrl?: string;
@@ -170,7 +175,21 @@ export function normalizeSong(input: Partial<MusicV2Song> & {
     lrcUrl: input.lrcUrl || undefined,
     mrcUrl: input.mrcUrl || undefined,
     trcUrl: input.trcUrl || undefined,
+    qualities: (input as { qualities?: Array<{ type: string; size?: number | null }> }).qualities,
   };
+}
+
+function normalizeQualityOptions(song: LxServerSong) {
+  const list = song.types || song.meta?.qualitys || [];
+  if (Array.isArray(list) && list.length) return list;
+
+  const map = song._types || song.meta?._qualitys;
+  if (!map || typeof map !== 'object') return undefined;
+
+  return Object.entries(map).map(([type, value]) => ({
+    type,
+    size: value?.size ?? null,
+  }));
 }
 
 export function normalizeLxSong(song: LxServerSong): MusicV2Song {
@@ -193,6 +212,7 @@ export function normalizeLxSong(song: LxServerSong): MusicV2Song {
       song.album?.pic ||
       song.al?.picUrl,
     durationText: song.interval,
+    qualities: normalizeQualityOptions(song),
   });
 }
 
