@@ -576,6 +576,16 @@ export default function MusicClient({ children: _children }: { children?: React.
 
         const queueRecords = dbRecords;
 
+        // 先取本地完整歌曲信息，避免数据库历史记录缺字段时回放退化
+        const savedPlayState = localStorage.getItem('musicPlayState');
+        const playState = savedPlayState ? JSON.parse(savedPlayState) : {};
+        const savedPlaylist = Array.isArray(playState.playlist) ? playState.playlist as Song[] : [];
+        const savedSongMap = new Map(
+          savedPlaylist
+            .filter((song) => song?.id && song?.platform)
+            .map((song) => [`${song.platform}:${song.id}`, song])
+        );
+
         const sortedRecords: PlayRecord[] = queueRecords.map((record) => ({
           platform: record.source,
           id: record.songId,
@@ -584,17 +594,21 @@ export default function MusicClient({ children: _children }: { children?: React.
           timestamp: record.createdAt || record.lastPlayedAt || 0,
         }));
 
-        const sortedSongs: Song[] = queueRecords.map((record) => ({
-          id: record.songId,
-          name: record.name,
-          artist: record.artist,
-          album: record.album,
-          pic: record.cover,
-          platform: record.source,
-          duration: record.durationSec,
-          durationText: record.durationText,
-          songmid: record.songmid,
-        }));
+        const sortedSongs: Song[] = queueRecords.map((record) => {
+          const savedSong = savedSongMap.get(`${record.source}:${record.songId}`);
+          return {
+            ...(savedSong || {}),
+            id: record.songId,
+            name: record.name,
+            artist: record.artist,
+            album: record.album,
+            pic: record.cover,
+            platform: record.source,
+            duration: record.durationSec,
+            durationText: record.durationText,
+            songmid: record.songmid,
+          } as Song;
+        });
 
         // 2. 更新播放列表
         if (sortedRecords.length > 0) {
@@ -603,8 +617,6 @@ export default function MusicClient({ children: _children }: { children?: React.
         }
 
         // 3. 获取 localStorage 配置（只获取配置，不获取歌曲信息）
-        const savedPlayState = localStorage.getItem('musicPlayState');
-        const playState = savedPlayState ? JSON.parse(savedPlayState) : {};
 
         // 恢复配置状态（不包括歌曲）
         setCurrentSource(normalizeSource(playState.currentSource));

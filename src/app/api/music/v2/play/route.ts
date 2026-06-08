@@ -41,6 +41,9 @@ function buildStableStreamUrl(song: ReturnType<typeof normalizeSong>, quality: s
   if (song.lrcUrl) params.set('lrcUrl', song.lrcUrl);
   if (song.mrcUrl) params.set('mrcUrl', song.mrcUrl);
   if (song.trcUrl) params.set('trcUrl', song.trcUrl);
+  for (const item of song.qualities || []) {
+    if (item?.type) params.append('availableQuality', item.type);
+  }
 
   return `/api/music/v2/stream?${params.toString()}`;
 }
