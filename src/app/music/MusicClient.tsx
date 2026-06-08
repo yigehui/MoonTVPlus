@@ -10,7 +10,6 @@ import LyricsPiPWindow from '@/components/LyricsPiPWindow';
 import MusicSidebarDrawer from '@/components/music/MusicSidebarDrawer';
 import { useWatchRoomContextSafe } from '@/components/WatchRoomProvider';
 import { getSourceDisplayLabel, normalizeSource, SourcePill } from '@/lib/music/shared';
-import { MUSIC_QUALITY_OPTIONS } from '@/lib/music-v2';
 import type { MusicQuality, MusicSource, Song } from '@/lib/music/types';
 import type { MusicQueueItem, MusicSyncState } from '@/types/watch-room';
 
@@ -20,6 +19,7 @@ const SPECTRUM_EDGE_TRIM = 8;
 const SPECTRUM_REFERENCE_VOLUME = 10;
 const SPECTRUM_MIN_VOLUME = 5;
 const SPECTRUM_MAX_REFERENCE_VOLUME = 15;
+const MUSIC_QUALITY_OPTIONS: MusicQuality[] = ['flac24bit', 'flac', '320k', '128k'];
 
 interface PlayRecord {
   platform: MusicSource;
