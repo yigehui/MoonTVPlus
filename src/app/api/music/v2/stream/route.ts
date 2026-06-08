@@ -176,7 +176,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const source = searchParams.get('source') || '';
     const songId = searchParams.get('songId') || '';
-    const requestedQuality = normalizeMusicQuality(searchParams.get('quality') || 'flac24bit');
+    const requestedQuality = normalizeMusicQuality(searchParams.get('quality') || 'auto');
 
     if (!isMusicSource(source)) return badRequest('不支持的音源');
     if (!songId) return badRequest('缺少歌曲ID');

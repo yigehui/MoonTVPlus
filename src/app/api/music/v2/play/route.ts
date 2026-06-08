@@ -77,7 +77,7 @@ function resolveRequestedQualities(song: ReturnType<typeof normalizeSong>, reque
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const requestedQuality = ((body?.quality || 'flac24bit') as MusicQuality);
+    const requestedQuality = ((body?.quality || 'auto') as MusicQuality);
     const includeUrl = body?.includeUrl !== false;
     const song = normalizeSong(body?.song || {});
 

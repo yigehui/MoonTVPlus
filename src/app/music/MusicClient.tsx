@@ -19,7 +19,6 @@ const SPECTRUM_EDGE_TRIM = 8;
 const SPECTRUM_REFERENCE_VOLUME = 10;
 const SPECTRUM_MIN_VOLUME = 5;
 const SPECTRUM_MAX_REFERENCE_VOLUME = 15;
-const MUSIC_QUALITY_OPTIONS: MusicQuality[] = ['flac24bit', 'flac', '320k', '128k'];
 
 interface PlayRecord {
   platform: MusicSource;
@@ -228,7 +227,7 @@ export default function MusicClient({ children: _children }: { children?: React.
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(100);
-  const [quality, setQuality] = useState<MusicQuality>('flac24bit');
+  const [quality, setQuality] = useState<MusicQuality>('auto');
   const [playMode, setPlayMode] = useState<'loop' | 'single' | 'random'>('loop');
   const [currentSongIndex, setCurrentSongIndex] = useState(-1);
   const [showPlayer, setShowPlayer] = useState(false);
@@ -245,7 +244,6 @@ export default function MusicClient({ children: _children }: { children?: React.
   const [playlist, setPlaylist] = useState<Song[]>([]); // 完整歌曲信息（用于显示）
   const [showPlaylist, setShowPlaylist] = useState(false);
   const [playlistIndex, setPlaylistIndex] = useState(-1); // 当前在播放列表中的索引
-  const [showQualityMenu, setShowQualityMenu] = useState(false); // 音质选择菜单
   const [showSleepTimerMenu, setShowSleepTimerMenu] = useState(false); // 睡眠定时菜单
   const [sleepTimerEndAt, setSleepTimerEndAt] = useState<number | null>(null); // 睡眠定时结束时间
   const [sleepTimerRemaining, setSleepTimerRemaining] = useState(0); // 睡眠定时剩余秒数
@@ -620,7 +618,7 @@ export default function MusicClient({ children: _children }: { children?: React.
 
         // 恢复配置状态（不包括歌曲）
         setCurrentSource(normalizeSource(playState.currentSource));
-        setQuality(playState.quality || 'flac24bit');
+        setQuality('auto');
         setPlayMode(playState.playMode || 'loop');
         setVolume(playState.volume || 100);
 
@@ -646,7 +644,7 @@ export default function MusicClient({ children: _children }: { children?: React.
           songStartTimeRef.current = Date.now();
 
           const platform = latestDbSong.platform || 'kw';
-          const selectedQuality = playState.quality || 'flac24bit';
+          const selectedQuality: MusicQuality = 'auto';
 
           const restoreTime = () => {
             if (audioRef.current && dbPlayTime > 0) {
@@ -1102,159 +1100,6 @@ export default function MusicClient({ children: _children }: { children?: React.
     }
   };
 
-  // 切换音质
-  const handleQualityChange = async (nextQuality: MusicQuality) => {
-    setShowQualityMenu(false);
-
-    if (nextQuality === quality) return;
-
-    const targetSong = currentSong;
-    const audio = audioRef.current;
-    const targetPlatform = targetSong?.platform || currentSource;
-
-    currentSongRef.current = targetSong;
-    currentSourceRef.current = currentSource;
-
-    setQuality(nextQuality);
-
-    // 没有正在播放的歌曲时，仅保存偏好；下次播放会使用新音质。
-    if (!targetSong || !audio) return;
-
-    const requestId = ++qualitySwitchRequestRef.current;
-    const targetSongKey = `${targetPlatform}:${targetSong.id}`;
-    const resumeTime = Number.isFinite(audio.currentTime) ? audio.currentTime : currentTimeRef.current;
-    const shouldResume = isPlaying || (!audio.paused && !audio.ended);
-
-    const isStillTargetSong = () => {
-      const activeSong = currentSongRef.current;
-      if (!activeSong) return false;
-
-      const activePlatform = activeSong.platform || currentSourceRef.current;
-      return (
-        requestId === qualitySwitchRequestRef.current &&
-        `${activePlatform}:${activeSong.id}` === targetSongKey
-      );
-    };
-
-    beginResolving();
-    try {
-      const proxyEnabled = getMusicProxyEnabled();
-      setMusicProxyEnabled(proxyEnabled);
-
-      let nextSongUrl = '';
-
-      if (proxyEnabled) {
-        nextSongUrl = buildStreamUrl(targetSong, targetPlatform, nextQuality);
-      } else {
-        const data = await fetchPlayData(targetSong, targetPlatform, nextQuality, true);
-        if (!isStillTargetSong()) return;
-
-        if (!data.success || !data.data?.play?.directUrl) {
-          throw new Error(data.error?.message || '获取播放地址失败');
-        }
-
-        nextSongUrl = data.data.play.directUrl;
-
-        if (data.data.song?.cover) {
-          setCurrentSong({
-            ...targetSong,
-            pic: data.data.song.cover,
-            platform: targetPlatform,
-          });
-        }
-
-        if (data.data.lyric?.lyric) {
-          const parsedLyrics = parseLyric(data.data.lyric.lyric, data.data.lyric.tlyric);
-          setLyrics(parsedLyrics);
-        }
-      }
-
-      if (!isStillTargetSong()) return;
-
-      const activeRecord =
-        playRecords[playlistIndex]?.platform === targetPlatform && playRecords[playlistIndex]?.id === targetSong.id
-          ? playRecords[playlistIndex]
-          : playRecords.find((record) => record.platform === targetPlatform && record.id === targetSong.id);
-      const totalDuration =
-        Number.isFinite(audio.duration) && audio.duration > 0
-          ? audio.duration
-          : duration || targetSong.duration || 0;
-
-      if (activeRecord) {
-        saveHistoryRecordSafely(
-          activeRecord,
-          { ...targetSong, platform: targetPlatform },
-          resumeTime,
-          totalDuration,
-          Date.now(),
-          nextQuality
-        );
-      }
-
-      setCurrentSongUrl(nextSongUrl);
-      setCurrentTime(resumeTime);
-      songStartTimeRef.current = Date.now();
-      restoredTimeRef.current = resumeTime;
-
-      const resumeAfterMetadata = () => {
-        if (!isStillTargetSong()) return;
-
-        if (resumeTime > 0) {
-          try {
-            const maxSeekTime =
-              Number.isFinite(audio.duration) && audio.duration > 0
-                ? Math.max(0, audio.duration - 0.25)
-                : resumeTime;
-            const seekTime = Math.min(resumeTime, maxSeekTime);
-
-            if (Math.abs(audio.currentTime - seekTime) > 1) {
-              audio.currentTime = seekTime;
-            }
-          } catch (error) {
-            console.warn('切换音质后恢复播放进度失败:', error);
-          }
-        }
-
-        setCurrentTime(audio.currentTime || resumeTime);
-
-        if (shouldResume) {
-          audio.play()
-            .then(() => setIsPlaying(true))
-            .catch((error) => {
-              console.error('切换音质后播放失败:', error);
-              setIsPlaying(false);
-              setIsBuffering(false);
-            });
-        } else {
-          setIsPlaying(false);
-        }
-      };
-
-      audio.pause();
-      setIsBuffering(true);
-      audio.src = nextSongUrl;
-      audio.addEventListener('loadedmetadata', resumeAfterMetadata, { once: true });
-      audio.load();
-      setIsPlaying(shouldResume);
-    } catch (error) {
-      console.error('切换音质失败:', error);
-      setIsBuffering(false);
-      setToast({
-        message: (error as Error).message || '切换音质失败',
-        type: 'error',
-        onClose: () => setToast(null),
-      });
-    } finally {
-      endResolving();
-    }
-  };
-
-  const cycleQuality = () => {
-    const qualities = [...MUSIC_QUALITY_OPTIONS] as MusicQuality[];
-    const currentIndex = qualities.indexOf(quality);
-    const nextIndex = (currentIndex + 1) % qualities.length;
-    void handleQualityChange(qualities[nextIndex]);
-  };
 
   // 清空播放记录
   const handleClearPlayRecords = () => {
@@ -1654,16 +1499,6 @@ export default function MusicClient({ children: _children }: { children?: React.
     localStorage.setItem('musicShowSpectrum', showSpectrum ? '1' : '0');
   }, [showSpectrum]);
 
-  const getQualityLabel = () => {
-    switch (quality) {
-      case 'auto': return 'AUTO';
-      case '128k': return '标准';
-      case '320k': return 'HQ';
-      case 'flac': return 'SQ';
-      case 'flac24bit': return 'HR';
-      default: return 'AUTO';
-    }
-  };
 
   const getSourceLabel = () => {
     return getSourceDisplayLabel(currentSource, false);
@@ -2536,13 +2371,6 @@ export default function MusicClient({ children: _children }: { children?: React.
                   </svg>
                 </button>
                 <button
-                  onClick={() => setShowQualityMenu(true)}
-                  className="px-2 py-0.5 rounded border text-amber-400 border-amber-500/50 bg-amber-900/20 text-[9px] md:text-[10px] font-mono min-w-[32px] text-center hover:bg-amber-900/30 transition-colors"
-                  title="音质选择"
-                >
-                  {getQualityLabel()}
-                </button>
-                <button
                   onClick={(e) => {
                     e.stopPropagation();
                     setShowSleepTimerMenu(true);
@@ -2997,79 +2825,6 @@ export default function MusicClient({ children: _children }: { children?: React.
         </div>
       )}
 
-      {/* Quality Selection Menu */}
-      {showQualityMenu && (
-        <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-end justify-center"
-          onClick={() => setShowQualityMenu(false)}
-        >
-          <div
-            className="w-full max-w-md bg-zinc-900 rounded-t-2xl border-t border-white/10 shadow-2xl animate-slide-up"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="p-4 border-b border-white/10">
-              <h3 className="text-lg font-bold text-white text-center">选择音质</h3>
-            </div>
-
-            {/* Quality Options */}
-            <div className="p-4 space-y-2">
-              {([
-                {
-                  value: 'flac24bit',
-                  title: 'Hi-Res',
-                },
-                {
-                  value: 'flac',
-                  title: 'FLAC 无损',
-                },
-                {
-                  value: '320k',
-                  title: '320K 高品质',
-                },
-                {
-                  value: '128k',
-                  title: '128K 标准',
-                },
-              ] as Array<{ value: MusicQuality; title: string }>).map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => {
-                    void handleQualityChange(option.value);
-                  }}
-                  className={`w-full p-4 rounded-lg flex items-center justify-between transition-colors ${
-                    quality === option.value
-                      ? 'bg-amber-500/20 border border-amber-500/50'
-                      : 'bg-white/5 hover:bg-white/10'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-2 h-2 rounded-full ${quality === option.value ? 'bg-amber-400' : 'bg-zinc-600'}`} />
-                    <div className="text-left">
-                      <div className="text-white font-medium">{option.title}</div>
-                    </div>
-                  </div>
-                  {quality === option.value && (
-                    <svg className="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {/* Cancel Button */}
-            <div className="p-4 pt-0">
-              <button
-                onClick={() => setShowQualityMenu(false)}
-                className="w-full p-3 rounded-lg bg-white/5 hover:bg-white/10 text-white transition-colors"
-              >
-                取消
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
 
       <MusicSidebarDrawer
