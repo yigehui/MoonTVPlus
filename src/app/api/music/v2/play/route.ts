@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { extractSongmid, fetchLxLyric, MusicQuality, normalizeSong, lxPostJson } from '@/lib/music-v2';
+import { extractSongmid, fetchLxLyric, getRequestedQualityFallbackChain, MusicQuality, normalizeSong, lxPostJson } from '@/lib/music-v2';
 import { badRequest, internalError } from '@/lib/music-v2-api';
 
 export const runtime = 'nodejs';
 
 const PLAY_META_CACHE_TTL_MS = 2 * 60 * 60 * 1000;
-const QUALITY_PRIORITY = ['flac24bit', 'flac', '320k', '192k', '128k'] as const;
-
 type PlayMetaPayload = {
   song: ReturnType<typeof normalizeSong>;
   lyric: {
@@ -69,22 +67,14 @@ function setCachedPlayMeta(cacheKey: string, payload: PlayMetaPayload) {
 }
 
 function resolveRequestedQualities(song: ReturnType<typeof normalizeSong>, requestedQuality: MusicQuality) {
-  const available = (song.qualities || [])
-    .map(item => item.type)
-    .filter((type): type is typeof QUALITY_PRIORITY[number] => QUALITY_PRIORITY.includes(type as typeof QUALITY_PRIORITY[number]));
-
-  if (requestedQuality !== 'auto') {
-    return [requestedQuality];
-  }
-
-  const dedupedAvailable = QUALITY_PRIORITY.filter(type => available.includes(type));
-  return dedupedAvailable.length ? dedupedAvailable : ['flac24bit', 'flac', '320k', '192k', '128k'];
+  const available = (song.qualities || []).map(item => item.type);
+  return getRequestedQualityFallbackChain(requestedQuality, available);
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const requestedQuality = ((body?.quality || 'auto') as MusicQuality);
+    const requestedQuality = ((body?.quality || 'flac24bit') as MusicQuality);
     const includeUrl = body?.includeUrl !== false;
     const song = normalizeSong(body?.song || {});
 
@@ -93,7 +83,7 @@ export async function POST(request: NextRequest) {
     }
 
     const candidateQualities = resolveRequestedQualities(song, requestedQuality);
-    const primaryQuality = candidateQualities[0] || '320k';
+    const primaryQuality = candidateQualities[0] || 'flac24bit';
     const cacheKey = getPlayMetaCacheKey(song, primaryQuality);
     let cachedMeta = getCachedPlayMeta(cacheKey);
 

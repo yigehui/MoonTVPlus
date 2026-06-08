@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { extractSongmid, isMusicSource, lxPostJson, normalizeMusicQuality, normalizeSong } from '@/lib/music-v2';
+import { extractSongmid, getRequestedQualityFallbackChain, isMusicSource, lxPostJson, normalizeMusicQuality, normalizeSong } from '@/lib/music-v2';
 import { badRequest } from '@/lib/music-v2-api';
 
 export const runtime = 'nodejs';
@@ -9,16 +9,22 @@ const STREAM_URL_CACHE_TTL_MS = 30 * 1000;
 
 type StreamUrlCacheValue = {
   url: string;
+  quality: string;
   expiresAt: number;
+};
+
+type StreamUrlResolution = {
+  url: string;
+  quality: string;
 };
 
 const globalMusicStreamCache = globalThis as typeof globalThis & {
   __musicV2StreamUrlCache?: Map<string, StreamUrlCacheValue>;
-  __musicV2StreamUrlInflight?: Map<string, Promise<string>>;
+  __musicV2StreamUrlInflight?: Map<string, Promise<StreamUrlResolution>>;
 };
 
 const streamUrlCache = globalMusicStreamCache.__musicV2StreamUrlCache ?? new Map<string, StreamUrlCacheValue>();
-const streamUrlInflight = globalMusicStreamCache.__musicV2StreamUrlInflight ?? new Map<string, Promise<string>>();
+const streamUrlInflight = globalMusicStreamCache.__musicV2StreamUrlInflight ?? new Map<string, Promise<StreamUrlResolution>>();
 
 globalMusicStreamCache.__musicV2StreamUrlCache = streamUrlCache;
 globalMusicStreamCache.__musicV2StreamUrlInflight = streamUrlInflight;
@@ -34,57 +40,64 @@ function getCachedStreamUrl(cacheKey: string) {
     streamUrlCache.delete(cacheKey);
     return null;
   }
-  return cached.url;
+  return cached;
 }
 
-function setCachedStreamUrl(cacheKey: string, url: string) {
+function setCachedStreamUrl(cacheKey: string, url: string, quality: string) {
   streamUrlCache.set(cacheKey, {
     url,
+    quality,
     expiresAt: Date.now() + STREAM_URL_CACHE_TTL_MS,
   });
 }
 
 async function resolveStreamUrl(
   song: ReturnType<typeof normalizeSong>,
-  quality: string,
+  qualities: string[],
   cacheKey: string
 ) {
-  const cachedUrl = getCachedStreamUrl(cacheKey);
-  if (cachedUrl) return cachedUrl;
+  const cached = getCachedStreamUrl(cacheKey);
+  if (cached) return cached;
 
   const inflight = streamUrlInflight.get(cacheKey);
   if (inflight) return inflight;
 
   const resolverPromise = (async () => {
-    const urlResult = await lxPostJson<{ url?: string; error?: string }>(
-      '/api/music/url',
-      {
-        songInfo: {
-          id: song.songId,
-          name: song.name,
-          singer: song.artist,
-          source: song.source,
-          songmid: extractSongmid(song),
-          hash: song.hash,
-          interval: song.durationText,
-          copyrightId: song.copyrightId,
-          albumId: song.albumId,
-          lrcUrl: song.lrcUrl,
-          mrcUrl: song.mrcUrl,
-          trcUrl: song.trcUrl,
-        },
-        quality,
-      },
-      'auto'
-    );
+    let lastError = '获取音频流失败';
 
-    const upstreamUrl = urlResult?.url;
-    if (!upstreamUrl) {
-      throw new Error(urlResult?.error || '获取音频流失败');
+    for (const quality of qualities) {
+      const urlResult = await lxPostJson<{ url?: string; error?: string }>(
+        '/api/music/url',
+        {
+          songInfo: {
+            id: song.songId,
+            name: song.name,
+            singer: song.artist,
+            source: song.source,
+            songmid: extractSongmid(song),
+            hash: song.hash,
+            interval: song.durationText,
+            copyrightId: song.copyrightId,
+            albumId: song.albumId,
+            lrcUrl: song.lrcUrl,
+            mrcUrl: song.mrcUrl,
+            trcUrl: song.trcUrl,
+          },
+          quality,
+        },
+        'auto'
+      );
+
+      const upstreamUrl = urlResult?.url;
+      if (upstreamUrl) {
+        setCachedStreamUrl(cacheKey, upstreamUrl, quality);
+        return { url: upstreamUrl, quality };
+      }
+
+      if (urlResult?.error) lastError = urlResult.error;
     }
 
-    setCachedStreamUrl(cacheKey, upstreamUrl);
-    return upstreamUrl;
+    throw new Error(lastError);
   })();
 
   streamUrlInflight.set(cacheKey, resolverPromise);
@@ -153,7 +166,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const source = searchParams.get('source') || '';
     const songId = searchParams.get('songId') || '';
-    const quality = normalizeMusicQuality(searchParams.get('quality') || '320k');
+    const requestedQuality = normalizeMusicQuality(searchParams.get('quality') || 'flac24bit');
 
     if (!isMusicSource(source)) return badRequest('不支持的音源');
     if (!songId) return badRequest('缺少歌曲ID');
@@ -173,8 +186,11 @@ export async function GET(request: NextRequest) {
       trcUrl: searchParams.get('trcUrl') || undefined,
     });
 
-    const cacheKey = getStreamCacheKey(song, quality);
-    let upstreamUrl = await resolveStreamUrl(song, quality, cacheKey);
+    const cacheKey = getStreamCacheKey(song, requestedQuality);
+    const candidateQualities = getRequestedQualityFallbackChain(requestedQuality);
+    let streamResolution = await resolveStreamUrl(song, candidateQualities, cacheKey);
+    let upstreamUrl = streamResolution.url;
+    let actualQuality = streamResolution.quality;
     let upstreamHeaders = buildUpstreamHeaders(request, upstreamUrl);
 
     const fetchUpstream = (url: string, headers: Headers) => fetch(url, {
@@ -188,13 +204,16 @@ export async function GET(request: NextRequest) {
       upstream = await fetchUpstream(upstreamUrl, upstreamHeaders);
     } catch (error) {
       streamUrlCache.delete(cacheKey);
-      upstreamUrl = await resolveStreamUrl(song, quality, cacheKey);
+      streamResolution = await resolveStreamUrl(song, candidateQualities, cacheKey);
+      upstreamUrl = streamResolution.url;
+      actualQuality = streamResolution.quality;
       upstreamHeaders = buildUpstreamHeaders(request, upstreamUrl);
       upstream = await fetchUpstream(upstreamUrl, upstreamHeaders);
       console.warn('[music-v2/stream] upstream fetch failed once, retried with refreshed URL', {
         source,
         songId,
-        quality,
+        quality: requestedQuality,
+        actualQuality,
         range: request.headers.get('range'),
         reason: (error as Error).message,
       });
@@ -203,7 +222,9 @@ export async function GET(request: NextRequest) {
     if (!upstream.ok && upstream.status !== 206) {
       if ([401, 403, 404, 410, 416].includes(upstream.status)) {
         streamUrlCache.delete(cacheKey);
-        upstreamUrl = await resolveStreamUrl(song, quality, cacheKey);
+        streamResolution = await resolveStreamUrl(song, candidateQualities, cacheKey);
+        upstreamUrl = streamResolution.url;
+        actualQuality = streamResolution.quality;
         upstreamHeaders = buildUpstreamHeaders(request, upstreamUrl);
         upstream = await fetchUpstream(upstreamUrl, upstreamHeaders);
       }
@@ -214,7 +235,7 @@ export async function GET(request: NextRequest) {
     }
 
     const responseHeaders = new Headers();
-    responseHeaders.set('Content-Type', inferAudioContentType(upstreamUrl, upstream.headers.get('content-type'), quality));
+    responseHeaders.set('Content-Type', inferAudioContentType(upstreamUrl, upstream.headers.get('content-type'), actualQuality));
     responseHeaders.set('Cache-Control', 'no-store');
     responseHeaders.set('Pragma', 'no-cache');
     responseHeaders.set('Expires', '0');

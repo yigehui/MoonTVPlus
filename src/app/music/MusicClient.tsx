@@ -10,6 +10,7 @@ import LyricsPiPWindow from '@/components/LyricsPiPWindow';
 import MusicSidebarDrawer from '@/components/music/MusicSidebarDrawer';
 import { useWatchRoomContextSafe } from '@/components/WatchRoomProvider';
 import { getSourceDisplayLabel, normalizeSource, SourcePill } from '@/lib/music/shared';
+import { MUSIC_QUALITY_OPTIONS } from '@/lib/music-v2';
 import type { MusicQuality, MusicSource, Song } from '@/lib/music/types';
 import type { MusicQueueItem, MusicSyncState } from '@/types/watch-room';
 
@@ -227,7 +228,7 @@ export default function MusicClient({ children: _children }: { children?: React.
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(100);
-  const [quality, setQuality] = useState<MusicQuality>('auto');
+  const [quality, setQuality] = useState<MusicQuality>('flac24bit');
   const [playMode, setPlayMode] = useState<'loop' | 'single' | 'random'>('loop');
   const [currentSongIndex, setCurrentSongIndex] = useState(-1);
   const [showPlayer, setShowPlayer] = useState(false);
@@ -398,7 +399,7 @@ export default function MusicClient({ children: _children }: { children?: React.
 
   const buildStreamUrl = (song: Song, source: MusicSource, songQuality: MusicQuality) => {
     const effectiveQuality = songQuality === 'auto'
-      ? (song.qualities?.[0]?.type || '320k')
+      ? (song.qualities?.[0]?.type || 'flac24bit')
       : songQuality;
 
     const params = new URLSearchParams({
@@ -604,7 +605,7 @@ export default function MusicClient({ children: _children }: { children?: React.
 
         // 恢复配置状态（不包括歌曲）
         setCurrentSource(normalizeSource(playState.currentSource));
-        setQuality(playState.quality || 'auto');
+        setQuality(playState.quality || 'flac24bit');
         setPlayMode(playState.playMode || 'loop');
         setVolume(playState.volume || 100);
 
@@ -630,7 +631,7 @@ export default function MusicClient({ children: _children }: { children?: React.
           songStartTimeRef.current = Date.now();
 
           const platform = latestDbSong.platform || 'kw';
-          const selectedQuality = playState.quality || 'auto';
+          const selectedQuality = playState.quality || 'flac24bit';
 
           const restoreTime = () => {
             if (audioRef.current && dbPlayTime > 0) {
@@ -1234,7 +1235,7 @@ export default function MusicClient({ children: _children }: { children?: React.
   };
 
   const cycleQuality = () => {
-    const qualities: MusicQuality[] = ['auto', '128k', '320k', 'flac', 'flac24bit'];
+    const qualities = [...MUSIC_QUALITY_OPTIONS] as MusicQuality[];
     const currentIndex = qualities.indexOf(quality);
     const nextIndex = (currentIndex + 1) % qualities.length;
     void handleQualityChange(qualities[nextIndex]);
@@ -2960,29 +2961,53 @@ export default function MusicClient({ children: _children }: { children?: React.
 
             {/* Quality Options */}
             <div className="p-4 space-y-2">
-              <button
-                onClick={() => {
-                  void handleQualityChange('auto');
-                }}
-                className={`w-full p-4 rounded-lg flex items-center justify-between transition-colors ${
-                  quality === 'auto'
-                    ? 'bg-amber-500/20 border border-amber-500/50'
-                    : 'bg-white/5 hover:bg-white/10'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`w-2 h-2 rounded-full ${quality === 'auto' ? 'bg-amber-400' : 'bg-zinc-600'}`} />
-                  <div className="text-left">
-                    <div className="text-white font-medium">自动选择最佳音质</div>
-                    <div className="text-xs text-zinc-500">优先使用当前音源可播放的最高音质</div>
+              {([
+                {
+                  value: 'flac24bit',
+                  title: 'Hi-Res',
+                  description: '默认优先，拿不到会自动降级到 FLAC / 320K / 128K',
+                },
+                {
+                  value: 'flac',
+                  title: 'FLAC 无损',
+                  description: '优先 FLAC，拿不到会自动降级到 320K / 128K',
+                },
+                {
+                  value: '320k',
+                  title: '320K 高品质',
+                  description: '优先 320K，拿不到会自动降级到 128K',
+                },
+                {
+                  value: '128k',
+                  title: '128K 标准',
+                  description: '优先流畅播放',
+                },
+              ] as Array<{ value: MusicQuality; title: string; description: string }>).map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => {
+                    void handleQualityChange(option.value);
+                  }}
+                  className={`w-full p-4 rounded-lg flex items-center justify-between transition-colors ${
+                    quality === option.value
+                      ? 'bg-amber-500/20 border border-amber-500/50'
+                      : 'bg-white/5 hover:bg-white/10'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full ${quality === option.value ? 'bg-amber-400' : 'bg-zinc-600'}`} />
+                    <div className="text-left">
+                      <div className="text-white font-medium">{option.title}</div>
+                      <div className="text-xs text-zinc-500">{option.description}</div>
+                    </div>
                   </div>
-                </div>
-                {quality === 'auto' && (
-                  <svg className="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                )}
-              </button>
+                  {quality === option.value && (
+                    <svg className="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </button>
+              ))}
             </div>
 
             {/* Cancel Button */}

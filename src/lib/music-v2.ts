@@ -5,6 +5,9 @@ export const runtime = 'nodejs';
 export type MusicSource = 'wy' | 'tx' | 'kw' | 'kg' | 'mg';
 export type MusicQuality = '128k' | '192k' | '320k' | 'flac' | 'flac24bit' | 'auto';
 
+export const MUSIC_QUALITY_PRIORITY = ['flac24bit', 'flac', '320k', '192k', '128k'] as const;
+export const MUSIC_QUALITY_OPTIONS = ['flac24bit', 'flac', '320k', '128k'] as const;
+
 export function normalizeMusicSource(source?: string): MusicSource | '' {
   switch ((source || '').trim()) {
     case 'wy':
@@ -24,19 +27,36 @@ export function normalizeMusicSource(source?: string): MusicSource | '' {
   }
 }
 
-export function normalizeMusicQuality(quality?: string): Exclude<MusicQuality, 'flac24bit' | 'auto'> {
+export function normalizeMusicQuality(quality?: string): Exclude<MusicQuality, 'auto'> {
   switch (quality) {
     case '128k':
     case '192k':
     case '320k':
     case 'flac':
-      return quality;
     case 'flac24bit':
+      return quality;
     case 'auto':
-      return 'flac';
+      return 'flac24bit';
     default:
-      return 'flac';
+      return 'flac24bit';
   }
+}
+
+export function getRequestedQualityFallbackChain(
+  requestedQuality: MusicQuality | Exclude<MusicQuality, 'auto'>,
+  availableTypes?: string[]
+): Exclude<MusicQuality, 'auto'>[] {
+  const normalizedRequested = normalizeMusicQuality(requestedQuality);
+  const startIndex = MUSIC_QUALITY_PRIORITY.indexOf(normalizedRequested);
+  const baseChain = startIndex >= 0
+    ? [...MUSIC_QUALITY_PRIORITY.slice(startIndex)]
+    : [...MUSIC_QUALITY_PRIORITY];
+
+  if (!availableTypes?.length) return [...baseChain];
+
+  const availableSet = new Set(availableTypes);
+  const filtered = baseChain.filter(type => availableSet.has(type));
+  return filtered.length ? filtered : [...baseChain];
 }
 
 export interface MusicV2Song {
@@ -181,7 +201,13 @@ export function normalizeSong(input: Partial<MusicV2Song> & {
 
 function normalizeQualityOptions(song: LxServerSong) {
   const list = song.types || song.meta?.qualitys || [];
-  if (Array.isArray(list) && list.length) return list;
+  if (Array.isArray(list) && list.length) {
+    return [...list].sort((a, b) => {
+      const ai = MUSIC_QUALITY_PRIORITY.indexOf(a.type as (typeof MUSIC_QUALITY_PRIORITY)[number]);
+      const bi = MUSIC_QUALITY_PRIORITY.indexOf(b.type as (typeof MUSIC_QUALITY_PRIORITY)[number]);
+      return (ai === -1 ? Number.MAX_SAFE_INTEGER : ai) - (bi === -1 ? Number.MAX_SAFE_INTEGER : bi);
+    });
+  }
 
   const map = song._types || song.meta?._qualitys;
   if (!map || typeof map !== 'object') return undefined;
@@ -189,7 +215,11 @@ function normalizeQualityOptions(song: LxServerSong) {
   return Object.entries(map).map(([type, value]) => ({
     type,
     size: value?.size ?? null,
-  }));
+  })).sort((a, b) => {
+    const ai = MUSIC_QUALITY_PRIORITY.indexOf(a.type as (typeof MUSIC_QUALITY_PRIORITY)[number]);
+    const bi = MUSIC_QUALITY_PRIORITY.indexOf(b.type as (typeof MUSIC_QUALITY_PRIORITY)[number]);
+    return (ai === -1 ? Number.MAX_SAFE_INTEGER : ai) - (bi === -1 ? Number.MAX_SAFE_INTEGER : bi);
+  });
 }
 
 export function normalizeLxSong(song: LxServerSong): MusicV2Song {
