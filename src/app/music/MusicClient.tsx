@@ -3003,24 +3003,20 @@ export default function MusicClient({ children: _children }: { children?: React.
                 {
                   value: 'flac24bit',
                   title: 'Hi-Res',
-                  description: '默认优先，拿不到会自动降级到 FLAC / 320K / 128K',
                 },
                 {
                   value: 'flac',
                   title: 'FLAC 无损',
-                  description: '优先 FLAC，拿不到会自动降级到 320K / 128K',
                 },
                 {
                   value: '320k',
                   title: '320K 高品质',
-                  description: '优先 320K，拿不到会自动降级到 128K',
                 },
                 {
                   value: '128k',
                   title: '128K 标准',
-                  description: '优先流畅播放',
                 },
-              ] as Array<{ value: MusicQuality; title: string; description: string }>).map((option) => (
+              ] as Array<{ value: MusicQuality; title: string }>).map((option) => (
                 <button
                   key={option.value}
                   onClick={() => {
@@ -3036,7 +3032,6 @@ export default function MusicClient({ children: _children }: { children?: React.
                     <div className={`w-2 h-2 rounded-full ${quality === option.value ? 'bg-amber-400' : 'bg-zinc-600'}`} />
                     <div className="text-left">
                       <div className="text-white font-medium">{option.title}</div>
-                      <div className="text-xs text-zinc-500">{option.description}</div>
                     </div>
                   </div>
                   {quality === option.value && (
