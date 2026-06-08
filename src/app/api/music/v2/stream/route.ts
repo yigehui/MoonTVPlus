@@ -66,7 +66,7 @@ async function resolveStreamUrl(
     let lastError = '获取音频流失败';
 
     for (const quality of qualities) {
-      const urlResult = await lxPostJson<{ url?: string; error?: string }>(
+      const urlResult = await lxPostJson<{ url?: string; type?: string; error?: string }>(
         '/api/music/url',
         {
           songInfo: {
@@ -90,8 +90,9 @@ async function resolveStreamUrl(
 
       const upstreamUrl = urlResult?.url;
       if (upstreamUrl) {
-        setCachedStreamUrl(cacheKey, upstreamUrl, quality);
-        return { url: upstreamUrl, quality };
+        const resolvedQuality = normalizeMusicQuality(urlResult?.type || quality);
+        setCachedStreamUrl(cacheKey, upstreamUrl, resolvedQuality);
+        return { url: upstreamUrl, quality: resolvedQuality };
       }
 
       if (urlResult?.error) lastError = urlResult.error;
@@ -139,7 +140,7 @@ function buildUpstreamHeaders(request: NextRequest, upstreamUrl: string) {
 function inferAudioContentType(upstreamUrl: string, upstreamContentType: string | null, requestedQuality: string) {
   const pathname = new URL(upstreamUrl).pathname.toLowerCase();
 
-  if (pathname.endsWith('.flac') || requestedQuality === 'flac') {
+  if (pathname.endsWith('.flac') || requestedQuality === 'flac' || requestedQuality === 'flac24bit') {
     return 'audio/flac';
   }
   if (pathname.endsWith('.m4a') || pathname.endsWith('.mp4')) {
