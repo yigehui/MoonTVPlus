@@ -412,6 +412,9 @@ export default function MusicClient({ children: _children }: { children?: React.
     });
 
     if (song.durationText) params.set('durationText', song.durationText);
+    for (const item of song.qualities || []) {
+      if (item?.type) params.append('availableQuality', item.type);
+    }
 
     return `/api/music/v2/stream?${params.toString()}`;
   };

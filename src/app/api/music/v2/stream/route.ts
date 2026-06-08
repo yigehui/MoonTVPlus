@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { extractSongmid, getRequestedQualityFallbackChain, isMusicSource, lxPostJson, normalizeMusicQuality, normalizeSong } from '@/lib/music-v2';
+import { extractSongmid, getRequestedQualityFallbackChain, isMusicSource, lxPostJson, normalizeMusicQuality, normalizeSong, normalizeAvailableQualityTypes } from '@/lib/music-v2';
 import { badRequest } from '@/lib/music-v2-api';
 
 export const runtime = 'nodejs';
@@ -172,6 +172,12 @@ export async function GET(request: NextRequest) {
     if (!isMusicSource(source)) return badRequest('不支持的音源');
     if (!songId) return badRequest('缺少歌曲ID');
 
+    const availableQualities = normalizeAvailableQualityTypes(
+      searchParams
+        .getAll('availableQuality')
+        .flatMap((value) => value.split(',').map((item) => item.trim()).filter(Boolean))
+    );
+
     const song = normalizeSong({
       songId,
       source,
@@ -185,10 +191,11 @@ export async function GET(request: NextRequest) {
       lrcUrl: searchParams.get('lrcUrl') || undefined,
       mrcUrl: searchParams.get('mrcUrl') || undefined,
       trcUrl: searchParams.get('trcUrl') || undefined,
+      qualities: availableQualities.map((type) => ({ type })),
     });
 
     const cacheKey = getStreamCacheKey(song, requestedQuality);
-    const candidateQualities = getRequestedQualityFallbackChain(requestedQuality);
+    const candidateQualities = getRequestedQualityFallbackChain(requestedQuality, availableQualities);
     let streamResolution = await resolveStreamUrl(song, candidateQualities, cacheKey);
     let upstreamUrl = streamResolution.url;
     let actualQuality = streamResolution.quality;

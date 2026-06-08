@@ -42,6 +42,27 @@ export function normalizeMusicQuality(quality?: string): Exclude<MusicQuality, '
   }
 }
 
+export function normalizeAvailableQualityTypes(availableTypes?: string[]) {
+  if (!availableTypes?.length) return [] as Exclude<MusicQuality, 'auto'>[];
+
+  const unique = new Set<Exclude<MusicQuality, 'auto'>>();
+  for (const type of availableTypes) {
+    switch (type) {
+      case '128k':
+      case '192k':
+      case '320k':
+      case 'flac':
+      case 'flac24bit':
+        unique.add(type);
+        break;
+      default:
+        break;
+    }
+  }
+
+  return MUSIC_QUALITY_PRIORITY.filter((type) => unique.has(type));
+}
+
 export function getRequestedQualityFallbackChain(
   requestedQuality: MusicQuality | Exclude<MusicQuality, 'auto'>,
   availableTypes?: string[]
@@ -52,9 +73,10 @@ export function getRequestedQualityFallbackChain(
     ? [...MUSIC_QUALITY_PRIORITY.slice(startIndex)]
     : [...MUSIC_QUALITY_PRIORITY];
 
-  if (!availableTypes?.length) return [...baseChain];
+  const normalizedAvailable = normalizeAvailableQualityTypes(availableTypes);
+  if (!normalizedAvailable.length) return [...baseChain];
 
-  const availableSet = new Set(availableTypes);
+  const availableSet = new Set(normalizedAvailable);
   const filtered = baseChain.filter(type => availableSet.has(type));
   return filtered.length ? filtered : [...baseChain];
 }
