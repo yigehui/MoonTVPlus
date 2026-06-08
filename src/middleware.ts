@@ -3,7 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
-import { TOKEN_CONFIG } from '@/lib/refresh-token';
+import { TOKEN_CONFIG } from '@/lib/token-config';
 import { isTVModeEnabled } from '@/lib/tv-mode';
 
 export async function middleware(request: NextRequest) {
