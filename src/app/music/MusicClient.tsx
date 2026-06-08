@@ -1296,14 +1296,52 @@ export default function MusicClient({ children: _children }: { children?: React.
     setPlayMode(modes[nextIndex]);
   };
 
-  // 下载歌曲
-  const downloadSong = () => {
+  const inferFileExtensionFromType = (contentType: string | null, url: string) => {
+    const normalizedType = (contentType || '').toLowerCase();
+    if (normalizedType.includes('audio/flac')) return 'flac';
+    if (normalizedType.includes('audio/mpeg') || normalizedType.includes('audio/mp3')) return 'mp3';
+    if (normalizedType.includes('audio/mp4') || normalizedType.includes('audio/m4a')) return 'm4a';
+    if (normalizedType.includes('audio/aac')) return 'aac';
+    if (normalizedType.includes('audio/ogg')) return 'ogg';
+    if (normalizedType.includes('audio/wav')) return 'wav';
+
+    try {
+      const parsed = new URL(url, window.location.origin);
+      const pathname = parsed.pathname.toLowerCase();
+      if (pathname.endsWith('.flac')) return 'flac';
+      if (pathname.endsWith('.mp3')) return 'mp3';
+      if (pathname.endsWith('.m4a') || pathname.endsWith('.mp4')) return 'm4a';
+      if (pathname.endsWith('.aac')) return 'aac';
+      if (pathname.endsWith('.ogg') || pathname.endsWith('.opus')) return 'ogg';
+      if (pathname.endsWith('.wav')) return 'wav';
+    } catch {
+      // ignore
+    }
+
+    return 'mp3';
+  };
+
+  // 下载歌曲（按当前实际播放流下载）
+  const downloadSong = async () => {
     if (!currentSongUrl || !currentSong) return;
 
-    // 创建一个临时的 a 标签来触发下载
+    let extension = 'mp3';
+    try {
+      const probeResponse = await fetch(currentSongUrl, {
+        method: 'GET',
+        headers: {
+          Range: 'bytes=0-0',
+        },
+      });
+      extension = inferFileExtensionFromType(probeResponse.headers.get('content-type'), currentSongUrl);
+    } catch (error) {
+      console.warn('探测下载文件类型失败，回退为默认扩展名:', error);
+      extension = inferFileExtensionFromType(null, currentSongUrl);
+    }
+
     const link = document.createElement('a');
     link.href = currentSongUrl;
-    link.download = `${currentSong.name} - ${currentSong.artist}.mp3`;
+    link.download = `${currentSong.name} - ${currentSong.artist}.${extension}`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
