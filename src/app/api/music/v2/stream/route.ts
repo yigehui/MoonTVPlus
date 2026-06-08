@@ -139,8 +139,13 @@ function buildUpstreamHeaders(request: NextRequest, upstreamUrl: string) {
 
 function inferAudioContentType(upstreamUrl: string, upstreamContentType: string | null, requestedQuality: string) {
   const pathname = new URL(upstreamUrl).pathname.toLowerCase();
+  const normalizedType = (upstreamContentType || '').toLowerCase();
 
-  if (pathname.endsWith('.flac') || requestedQuality === 'flac' || requestedQuality === 'flac24bit') {
+  if (normalizedType.startsWith('audio/')) {
+    return upstreamContentType || 'audio/mpeg';
+  }
+
+  if (pathname.endsWith('.flac')) {
     return 'audio/flac';
   }
   if (pathname.endsWith('.m4a') || pathname.endsWith('.mp4')) {
@@ -157,6 +162,10 @@ function inferAudioContentType(upstreamUrl: string, upstreamContentType: string 
   }
   if (pathname.endsWith('.mp3')) {
     return 'audio/mpeg';
+  }
+
+  if (requestedQuality === 'flac' || requestedQuality === 'flac24bit') {
+    return 'audio/flac';
   }
 
   return upstreamContentType || 'audio/mpeg';
