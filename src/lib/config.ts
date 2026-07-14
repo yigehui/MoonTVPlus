@@ -265,6 +265,10 @@ async function getInitConfig(
       Announcement:
         process.env.ANNOUNCEMENT ||
         '本网站仅提供影视信息搜索服务，所有内容均来自第三方网站。本站不存储任何视频资源，不对任何内容的准确性、合法性、完整性负责。',
+      AnnouncementDisplayMode:
+        process.env.ANNOUNCEMENT_DISPLAY_MODE === 'every'
+          ? 'every'
+          : 'once',
       SearchDownstreamMaxPage:
         Number(process.env.NEXT_PUBLIC_SEARCH_MAX_PAGE) || 5,
       SiteInterfaceCacheTime: cfgFile.cache_time || 7200,
@@ -313,6 +317,7 @@ async function getInitConfig(
       MagnetMikanReverseProxy: '',
       MagnetDmhyReverseProxy: '',
       MagnetAcgripReverseProxy: '',
+      MagnetNyaaReverseProxy: '',
       // 评论功能开关
       EnableComments: false,
       EnableRegistration: false,
@@ -330,6 +335,19 @@ async function getInitConfig(
     SourceConfig: [],
     CustomCategories: [],
     LiveConfig: [],
+    TelegramConfig: {
+      enabled: process.env.TELEGRAM_BOT_ENABLED === 'true' || Boolean(process.env.TELEGRAM_BOT_TOKEN),
+      botToken: process.env.TELEGRAM_BOT_TOKEN || '',
+      botUsername: process.env.TELEGRAM_BOT_USERNAME || '',
+      webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET || '',
+      apiProxy: process.env.TELEGRAM_API_PROXY || '',
+      apiBaseUrl: process.env.TELEGRAM_API_BASE_URL || '',
+      loginEnabled: process.env.TELEGRAM_LOGIN_ENABLED !== 'false',
+      bindingEnabled: process.env.TELEGRAM_BINDING_ENABLED !== 'false',
+      registrationEnabled: process.env.TELEGRAM_REGISTRATION_ENABLED === 'true',
+      notificationsEnabled: process.env.TELEGRAM_NOTIFICATIONS_ENABLED !== 'false',
+      defaultNotifications: process.env.TELEGRAM_DEFAULT_NOTIFICATIONS !== 'false',
+    },
     SpecialSourceApis: Array.isArray(cfgFile.special_source_apis)
       ? cfgFile.special_source_apis
       : Array.isArray(cfgFile.specialSourceApis)
@@ -509,6 +527,7 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
       MagnetMikanReverseProxy: '',
       MagnetDmhyReverseProxy: '',
       MagnetAcgripReverseProxy: '',
+      MagnetNyaaReverseProxy: '',
       EnableComments: false,
       EnableRegistration: false,
       RequireRegistrationInviteCode: false,
@@ -540,6 +559,11 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
   if (adminConfig.SiteConfig.EnableComments === undefined) {
     adminConfig.SiteConfig.EnableComments = false;
   }
+  // 确保公告显示模式存在
+  if (adminConfig.SiteConfig.AnnouncementDisplayMode === undefined) {
+    adminConfig.SiteConfig.AnnouncementDisplayMode =
+      process.env.ANNOUNCEMENT_DISPLAY_MODE === 'every' ? 'every' : 'once';
+  }
   if (adminConfig.SiteConfig.EnableRegistration === undefined) {
     adminConfig.SiteConfig.EnableRegistration = false;
   }
@@ -564,6 +588,25 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
   if (adminConfig.SiteConfig.DefaultUserTags === undefined) {
     adminConfig.SiteConfig.DefaultUserTags = [];
   }
+  if (!adminConfig.TelegramConfig) {
+    adminConfig.TelegramConfig = {
+      enabled: process.env.TELEGRAM_BOT_ENABLED === 'true' || Boolean(process.env.TELEGRAM_BOT_TOKEN),
+      botToken: process.env.TELEGRAM_BOT_TOKEN || '',
+      botUsername: process.env.TELEGRAM_BOT_USERNAME || '',
+      webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET || '',
+      apiProxy: process.env.TELEGRAM_API_PROXY || '',
+      apiBaseUrl: process.env.TELEGRAM_API_BASE_URL || '',
+      loginEnabled: process.env.TELEGRAM_LOGIN_ENABLED !== 'false',
+      bindingEnabled: process.env.TELEGRAM_BINDING_ENABLED !== 'false',
+      registrationEnabled: process.env.TELEGRAM_REGISTRATION_ENABLED === 'true',
+      notificationsEnabled: process.env.TELEGRAM_NOTIFICATIONS_ENABLED !== 'false',
+      defaultNotifications: process.env.TELEGRAM_DEFAULT_NOTIFICATIONS !== 'false',
+    };
+  }
+  if (adminConfig.TelegramConfig.registrationEnabled === undefined) {
+    adminConfig.TelegramConfig.registrationEnabled =
+      process.env.TELEGRAM_REGISTRATION_ENABLED === 'true';
+  }
   if (adminConfig.SiteConfig.PansouKeywordBlocklist === undefined) {
     adminConfig.SiteConfig.PansouKeywordBlocklist = '';
   }
@@ -578,6 +621,9 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
   }
   if (adminConfig.SiteConfig.MagnetAcgripReverseProxy === undefined) {
     adminConfig.SiteConfig.MagnetAcgripReverseProxy = '';
+  }
+  if (adminConfig.SiteConfig.MagnetNyaaReverseProxy === undefined) {
+    adminConfig.SiteConfig.MagnetNyaaReverseProxy = '';
   }
   if (!adminConfig.UserConfig) {
     adminConfig.UserConfig = { Users: [] };
@@ -702,6 +748,7 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
             UserId: oldConfig.UserId,
             AuthToken: oldConfig.AuthToken,
             Libraries: oldConfig.Libraries,
+            embyAuthorizationHeader: oldConfig.embyAuthorizationHeader,
             LastSyncTime: oldConfig.LastSyncTime,
             ItemCount: oldConfig.ItemCount,
             isDefault: true,

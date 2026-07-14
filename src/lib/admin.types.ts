@@ -8,6 +8,8 @@ export interface AdminConfig {
   SiteConfig: {
     SiteName: string;
     Announcement: string;
+    // 公告显示模式：once=单次显示（每个用户每条公告仅显示一次，换公告则重新显示）；every=每次显示（每次打开首页都显示）
+    AnnouncementDisplayMode?: 'once' | 'every';
     SearchDownstreamMaxPage: number;
     SiteInterfaceCacheTime: number;
     DoubanProxyType: string;
@@ -42,6 +44,7 @@ export interface AdminConfig {
     MagnetMikanReverseProxy?: string;
     MagnetDmhyReverseProxy?: string;
     MagnetAcgripReverseProxy?: string;
+    MagnetNyaaReverseProxy?: string;
     // 评论功能开关
     EnableComments: boolean;
     // 自定义去广告代码
@@ -261,6 +264,7 @@ export interface AdminConfig {
       transcodeMp4?: boolean; // 转码mp4
       proxyPlay?: boolean; // 视频播放代理开关
       customUserAgent?: string; // 自定义User-Agent
+      embyAuthorizationHeader?: string; // 自定义 X-Emby-Authorization 请求头
     }>;
     // 旧格式：单源配置（向后兼容）
     Enabled?: boolean;
@@ -271,6 +275,7 @@ export interface AdminConfig {
     UserId?: string;
     AuthToken?: string;
     Libraries?: string[];
+    embyAuthorizationHeader?: string;
     LastSyncTime?: number;
     ItemCount?: number;
   };
@@ -339,6 +344,19 @@ export interface AdminConfig {
       from: string; // 发件人邮箱
     };
   };
+  TelegramConfig?: {
+    enabled: boolean; // 是否启用 Telegram Bot
+    botToken?: string; // Bot Token，仅服务端使用
+    botUsername?: string; // Bot 用户名，用于前端跳转
+    webhookSecret?: string; // Webhook Secret Token
+    apiProxy?: string; // Telegram Bot API 系统代理（HTTP/HTTPS proxy）
+    apiBaseUrl?: string; // Telegram Bot API 反代 Base URL
+    loginEnabled?: boolean; // 是否启用 Telegram 登录
+    bindingEnabled?: boolean; // 是否启用用户绑定
+    registrationEnabled?: boolean; // 是否启用 Telegram 注册
+    notificationsEnabled?: boolean; // 是否启用 Telegram 通知
+    defaultNotifications?: boolean; // 新绑定用户默认开启通知
+  };
   MusicConfig?: {
     Enabled?: boolean; // 启用音乐功能
     BaseUrl?: string; // lxserver 地址
@@ -358,7 +376,7 @@ export interface AdminConfig {
       id: string;
       title: string;
       filterText: string;
-      source: 'acgrip' | 'mikan' | 'dmhy';
+      source: 'acgrip' | 'mikan' | 'dmhy' | 'nyaa';
       enabled: boolean;
       lastCheckTime: number;
       lastEpisode: number;
